@@ -24,6 +24,30 @@ def fix_cam_time(ds):
     ds = ds.assign_coords(time=dates)
     return ds
 
+def fix_clm_time(ds):
+    # Author: Marte Sofie Buraas / Ada Gjermundsen    
+
+    """ NorESM raw CAM h0 files has incorrect time variable output,
+    thus it is necessary to use time boundaries to get the correct time
+    If the time variable is not corrected, none of the functions involving time
+    e.g. yearly_avg, seasonal_avg etc. will provide correct information
+
+    Parameters
+    ----------
+    ds : xarray.DaraSet
+
+    Returns
+    -------
+    ds_weighted : xarray.DaraSet with corrected time
+    """
+    from cftime import DatetimeNoLeap
+
+    months = ds.time_bounds.isel(hist_interval=0).dt.month.values
+    years = ds.time_bounds.isel(hist_interval=0).dt.year.values
+    dates = [DatetimeNoLeap(year, month, 15) for year, month in zip(years, months)]
+    ds = ds.assign_coords(time=dates)
+    return ds
+
 def computeWeightedMean(ds):
 
     # Author: Anne Fouilloux
@@ -31,6 +55,26 @@ def computeWeightedMean(ds):
 
     # Compute weights based on the xarray you pass
     weights = np.cos(np.deg2rad(ds.lat))
+    weights.name = "weights"
+    # Compute weighted mean
+    air_weighted = ds.weighted(weights)
+    weighted_mean = air_weighted.mean(("lon", "lat"))
+    return weighted_mean
+
+def computeWeightedMeanMasked(ds, lat_lon_mask):
+
+    # Author: Anne Fouilloux
+    import numpy as np
+    import xarray as xr
+
+    # Compute weights based on the xarray you pass
+    gridbox_weights = np.cos(np.deg2rad(ds.lat))
+    broadcast_arr = xr.broadcast(gridbox_weights, lat_lon_mask.lon)
+    gridbox_weights = broadcast_arr[0]
+    if gridbox_weights.shape != lat_lon_mask.shape:
+        print("Data array and regional mask must have the same dimensions!")
+        return
+    weights = gridbox_weights * lat_lon_mask
     weights.name = "weights"
     # Compute weighted mean
     air_weighted = ds.weighted(weights)
@@ -147,6 +191,102 @@ def regrid_to_pressure(ds, var):
         earlier <= later for earlier, later in zip(lev, lev[1:])
     ), f"The vertical coordinate must be top-to-bottom: {lev}"
     daP = Ngl.vinth2p(ds[var], hyam, hybm, pnew, psrf, intyp, P0mb, 1, kxtrp)
+    daP[daP == 1e30] = np.NaN
+
+    if "year" in ds[var].dims:
+        da = xr.DataArray(
+            daP,
+            dims=("year", "plev", "lat", "lon"),
+            coords={
+                "year": ds.year,
+                "plev": np.asarray(pnew),
+                "lat": ds.lat,
+                "lon": ds.lon,
+            },
+        )
+    else:
+        da = xr.DataArray(
+            daP,
+            dims=("time", "plev", "lat", "lon"),
+            coords={
+                "time": ds.time,
+                "plev": np.asarray(pnew),
+                "lat": ds.lat,
+                "lon": ds.lon,
+            },
+        )
+    da = da.where(da.plev <= ds.PS)
+    da.attrs["units"] = ds[var].units
+    da.attrs["long_name"] = ds[var].long_name
+    da.attrs["standard_name"] = ds[var].long_name.replace(" ", "_")
+    return da.to_dataset(name=var)
+
+def regrid_to_pressure_interfaces(ds, var):
+    """
+    This function regrids from sigma to pressure levels
+     Parameters
+     ----------
+     ds :           xarray.Dataset pressure varibales [p0, ps, a (->hyai), b (->hybi)] and with atmospheric data to be interpolated to pressure levels.
+                    The order of the dimensions is specific.
+                    The three rightmost dimensions must be level x lat x lon [e.g. TS(time,ilev,lat,lon)].
+                    The order of the level dimension must be top-to-bottom.
+     var :          str, name of the atmospheric variable to be interpolated to pressure levels
+
+     Returns
+     -------
+     da :            xarray.DataArray with the interpolated atmospheric variable with vertical coordinate
+                     pressure in Pa
+
+    PyNGL:
+    conda create --name pyn_env --channel conda-forge pynio pyngl
+    source activate pyn_env
+
+    Ngl interpolation : https://www.pyngl.ucar.edu/Functions/Ngl.vinth2p.shtml
+    array = Ngl.vinth2p(datai, hbcofa, hbcofb, plevo,
+                     psfc, intyp, p0, ii, kxtrp)
+    Ngl vinth2p arguments/parameters:
+    datai: A NumPy array of 3 or 4 dimensions. This array needs to contain a level dimension in hybrid coordinates. The order of the dimensions is specific.
+    The three rightmost dimensions must be level x lat x lon [e.g. TS(time,ilev,lat,lon)]. The order of the level dimension must be top-to-bottom.
+    hbcofa: A one-dimensional NumPy array or Python list containing the hybrid A coefficients. Must have the same dimension as the level dimension of datai. The order must be top-to-bottom.
+    hbcofb: A one-dimensional NumPy array or Python list containing the hybrid B coefficients. Must have the same dimension as the level dimension of datai. The order must be top-to-bottom.
+    plevo: A one-dimensional NumPy array of output pressure levels in mb.
+    psfc: A multi-dimensional NumPy array of surface pressures in Pa. Must have the same dimension sizes as the corresponding dimensions of datai.
+    intyp: A scalar integer value equal to the interpolation type: 1 = LINEAR, 2 = LOG, 3 = LOG LOG
+    p0: A scalar value equal to surface reference pressure in mb.
+    ii: Not used at this time. Set to 1.
+    kxtrp: A logical value. If False, then no extrapolation is done when the pressure level is outside of the range of psfc.
+    """
+    import Ngl
+    import xarray as xr
+    import numpy as np
+
+    print("In regrid_to_pressure atf.function. Regridding %s to pressure levels" % var)
+    #  Extract the desired variables (need numpy arrays for vertical interpolation)
+    hyai = ds["hyai"]
+    if "time" in hyai.dims:
+        hyai = hyai.isel(time=0).drop_vars("time")
+    hybi = ds["hybi"]
+    if "time" in hybi.dims:
+        hybi = hybi.isel(time=0).drop_vars("time")
+    psrf = ds["PS"]
+
+    # Note that the units for psfc are Pascals (Pa) whereas the units for plevo and p0 are millibars (mb).
+    P0mb = 0.01 * ds["P0"]
+    if "time" in P0mb.dims:
+        P0mb = P0mb.isel(time=0).drop_vars("time")
+
+    # pnew = ds.lev.values
+    # pnew = np.arange(5.0, 1000., 20.)
+    pnew = np.sort(np.append(ds.ilev.values, (ds.ilev + 0.5 * ds.ilev.diff("ilev")).values))
+    intyp = 1  # 1=linear, 2=log, 3=log-log
+    kxtrp = False  # True=extrapolate
+
+    # The order of the level dimension must be top-to-bottom.
+    ilev = ds.ilev.values
+    assert all(
+        earlier <= later for earlier, later in zip(ilev, ilev[1:])
+    ), f"The vertical coordinate must be top-to-bottom: {ilev}"
+    daP = Ngl.vinth2p(ds[var], hyai, hybi, pnew, psrf, intyp, P0mb, 1, kxtrp)
     daP[daP == 1e30] = np.NaN
 
     if "year" in ds[var].dims:
