@@ -61,6 +61,33 @@ def computeWeightedMean(ds):
     weighted_mean = air_weighted.mean(("lon", "lat"))
     return weighted_mean
 
+def computeWeightedMean_WangMao(ds):
+
+    # Author: Anne Fouilloux
+    import numpy as np
+
+    # Compute weights based on the xarray you pass
+    weights = np.cos(np.deg2rad(ds.lat))
+    weights.name = "weights"
+    # Compute weighted mean
+    air_weighted = ds.weighted(weights)
+    weighted_mean = air_weighted.mean(("lon", "lat"))
+    return weighted_mean
+
+def computeWeightedMean_ERA5_Land(ds):
+
+    # Author: Anne Fouilloux
+    import numpy as np
+
+    # Compute weights based on the xarray you pass
+    weights = np.cos(np.deg2rad(ds.latitude))
+    weights.name = "weights"
+    # Compute weighted mean
+    air_weighted = ds.weighted(weights)
+    weighted_mean = air_weighted.mean(dim=["longitude", "latitude"],skipna=True)
+    return weighted_mean
+
+
 def computeWeightedMeanMasked(ds, lat_lon_mask):
 
     # Author: Anne Fouilloux
@@ -80,6 +107,41 @@ def computeWeightedMeanMasked(ds, lat_lon_mask):
     air_weighted = ds.weighted(weights)
     weighted_mean = air_weighted.mean(("lon", "lat"))
     return weighted_mean
+
+def computeWeightedStdMasked(ds, lat_lon_mask, season=None):
+
+    # Author: Anne Fouilloux
+    import numpy as np
+    import xarray as xr
+
+    # Compute weights based on the xarray you pass
+    if season==None:
+        gridbox_weights = np.cos(np.deg2rad(ds.lat))
+        broadcast_arr = xr.broadcast(gridbox_weights, lat_lon_mask.lon)
+        gridbox_weights = broadcast_arr[0]
+        if gridbox_weights.shape != lat_lon_mask.shape:
+            print("Data array and regional mask must have the same dimensions!")
+            return
+        weights = gridbox_weights * lat_lon_mask
+        weights.name = "weights"
+        # Compute weighted mean
+        air_weighted = ds.weighted(weights)
+        weighted_std = air_weighted.std(("lon", "lat"))
+        return weighted_std
+    else:
+        ds = ds.sel(time=ds.time.dt.season==season)
+        gridbox_weights = np.cos(np.deg2rad(ds.lat))
+        broadcast_arr = xr.broadcast(gridbox_weights, lat_lon_mask.lon)
+        gridbox_weights = broadcast_arr[0]
+        if gridbox_weights.shape != lat_lon_mask.shape:
+            print("Data array and regional mask must have the same dimensions!")
+            return
+        weights = gridbox_weights * lat_lon_mask
+        weights.name = "weights"
+        # Compute weighted mean
+        air_weighted = ds.weighted(weights)
+        weighted_std = air_weighted.std(("lon", "lat","time"))
+        return weighted_std
 
 
 def polarCentral_set_latlim(lat_lims, ax):
@@ -179,9 +241,9 @@ def regrid_to_pressure(ds, var):
     if "time" in P0mb.dims:
         P0mb = P0mb.isel(time=0).drop_vars("time")
 
-    # pnew = ds.lev.values
+    pnew = ds.lev.values
     # pnew = np.arange(5.0, 1000., 20.)
-    pnew = np.sort(np.append(ds.lev.values, (ds.lev + 0.5 * ds.lev.diff("lev")).values))
+    #pnew = np.sort(np.append(ds.lev.values, (ds.lev + 0.5 * ds.lev.diff("lev")).values))
     intyp = 1  # 1=linear, 2=log, 3=log-log
     kxtrp = False  # True=extrapolate
 
@@ -276,8 +338,8 @@ def regrid_to_pressure_interfaces(ds, var):
         P0mb = P0mb.isel(time=0).drop_vars("time")
 
     # pnew = ds.lev.values
-    # pnew = np.arange(5.0, 1000., 20.)
-    pnew = np.sort(np.append(ds.ilev.values, (ds.ilev + 0.5 * ds.ilev.diff("ilev")).values))
+    pnew = np.arange(5.0, 1000., 20.)
+    #pnew = np.sort(np.append(ds.ilev.values, (ds.ilev + 0.5 * ds.ilev.diff("ilev")).values))
     intyp = 1  # 1=linear, 2=log, 3=log-log
     kxtrp = False  # True=extrapolate
 
