@@ -61,32 +61,6 @@ def computeWeightedMean(ds):
     weighted_mean = air_weighted.mean(("lon", "lat"))
     return weighted_mean
 
-def computeWeightedMean_WangMao(ds):
-
-    # Author: Anne Fouilloux
-    import numpy as np
-
-    # Compute weights based on the xarray you pass
-    weights = np.cos(np.deg2rad(ds.lat))
-    weights.name = "weights"
-    # Compute weighted mean
-    air_weighted = ds.weighted(weights)
-    weighted_mean = air_weighted.mean(("lon", "lat"))
-    return weighted_mean
-
-def computeWeightedMean_ERA5_Land(ds):
-
-    # Author: Anne Fouilloux
-    import numpy as np
-
-    # Compute weights based on the xarray you pass
-    weights = np.cos(np.deg2rad(ds.latitude))
-    weights.name = "weights"
-    # Compute weighted mean
-    air_weighted = ds.weighted(weights)
-    weighted_mean = air_weighted.mean(dim=["longitude", "latitude"],skipna=True)
-    return weighted_mean
-
 
 def computeWeightedMeanMasked(ds, lat_lon_mask):
 
@@ -161,6 +135,7 @@ def polarCentral_set_latlim(lat_lims, ax):
     circle = mpath.Path(verts * radius + center)
 
     ax.set_boundary(circle, transform=ax.transAxes)
+
 
 def computeSeasonalMean(ds, season):
 
