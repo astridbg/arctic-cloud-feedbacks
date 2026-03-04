@@ -137,6 +137,27 @@ def polarCentral_set_latlim(lat_lims, ax):
     ax.set_boundary(circle, transform=ax.transAxes)
 
 
+def xr_add_cyclic_point(da):
+    """
+    Inputs
+    da: xr.DataArray with dimensions (time,lat,lon)
+    """
+    from cartopy.util import add_cyclic_point
+    import xarray as xr 
+
+    # Use add_cyclic_point to interpolate input data
+    lon_idx = da.dims.index('lon')
+    wrap_data, wrap_lon = add_cyclic_point(da.values, coord=da.lon, axis=lon_idx)
+
+    # Generate output DataArray with new data but same structure as input
+    outp_da = xr.DataArray(data=wrap_data, 
+                           coords = {'time': da.time, 'lat': da.lat, 'lon': wrap_lon}, 
+                           dims=da.dims, 
+                           attrs=da.attrs)
+    
+    return outp_da
+
+
 def computeSeasonalMean(ds, season):
 
     # Author: Astrid Bragstad Gjelsvik
@@ -161,6 +182,32 @@ def computeSeasonalMean(ds, season):
         return ds_season
     else:
         print('Please provide a season on the form "JJA", "DJF", "MAM" or "SON"')
+
+def computeSeasonalStd(ds, season):
+
+    # Author: Astrid Bragstad Gjelsvik
+    # Works for xarray datasets with monthly averages as time axis
+
+    import xarray as xr
+    if season == 'DJF':
+        ds_season = xr.concat([ds.sel(time=slice(1, 2)), ds.sel(time=12)], dim='time')
+        ds_season = ds_season.std('time')
+        return ds_season
+    elif season == 'MAM':
+        ds_season = ds.sel(time=slice(3, 5))
+        ds_season = ds_season.std('time')
+        return ds_season
+    elif season == 'JJA':
+        ds_season = ds.sel(time=slice(6, 8))
+        ds_season = ds_season.std('time')
+        return ds_season
+    elif season == 'SON':
+        ds_season = ds.sel(time=slice(9, 11))
+        ds_season = ds_season.std('time')
+        return ds_season
+    else:
+        print('Please provide a season on the form "JJA", "DJF", "MAM" or "SON"')
+
 
 def regrid_to_pressure(ds, var):
     """
