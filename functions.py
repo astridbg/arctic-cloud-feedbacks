@@ -183,31 +183,6 @@ def computeSeasonalMean(ds, season):
     else:
         print('Please provide a season on the form "JJA", "DJF", "MAM" or "SON"')
 
-def computeSeasonalStd(ds, season):
-
-    # Author: Astrid Bragstad Gjelsvik
-    # Works for xarray datasets with monthly averages as time axis
-
-    import xarray as xr
-    if season == 'DJF':
-        ds_season = xr.concat([ds.sel(time=slice(1, 2)), ds.sel(time=12)], dim='time')
-        ds_season = ds_season.std('time')
-        return ds_season
-    elif season == 'MAM':
-        ds_season = ds.sel(time=slice(3, 5))
-        ds_season = ds_season.std('time')
-        return ds_season
-    elif season == 'JJA':
-        ds_season = ds.sel(time=slice(6, 8))
-        ds_season = ds_season.std('time')
-        return ds_season
-    elif season == 'SON':
-        ds_season = ds.sel(time=slice(9, 11))
-        ds_season = ds_season.std('time')
-        return ds_season
-    else:
-        print('Please provide a season on the form "JJA", "DJF", "MAM" or "SON"')
-
 
 def regrid_to_pressure(ds, var):
     """
