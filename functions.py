@@ -375,3 +375,31 @@ def regrid_to_pressure_interfaces(ds, var):
     da.attrs["long_name"] = ds[var].long_name
     da.attrs["standard_name"] = ds[var].long_name.replace(" ", "_")
     return da.to_dataset(name=var)
+
+def prewhitening(x):
+
+    from scipy.stats import theilslopes
+    from statsmodels.tsa.stattools import acf
+    import numpy as np
+
+    x = x - np.mean(x)
+    slope, intercept, low_slope, high_slope = theilslopes(x, np.arange(len(x)))
+    x_detrended = x - slope*np.arange(len(x))
+    r1 = acf(x_detrended)[1]
+    x_independent = x_detrended
+    for i in range(1, (len(x))): x_independent[i] = x_detrended[i] - r1*x_detrended[i-1]
+    x_new = x_independent + slope*np.arange(len(x))
+
+    return x_new
+
+def theilslopes_mk_prewhitened_test(x):
+
+    from scipy.stats import theilslopes
+    import pymannkendall as mk
+    import numpy as np
+
+    slope, intercept, low_slope, high_slope = theilslopes(x, np.arange(len(x)))
+    x_prewhitened = prewhitening(x)
+    p_value = mk.original_test(x_prewhitened).p
+
+    return slope, intercept, low_slope, high_slope, p_value
