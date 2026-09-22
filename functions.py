@@ -453,3 +453,17 @@ def calculate_spatial_trends(data, start_year, end_year):
                     coords = dict(lat = data.lat, lon = data.lon))
     
     return ds
+
+def moving_average(data, window=3, fillNan=False, fillNaNextra=False):
+    import numpy as np
+
+    cumulative_sum = np.cumsum(data, dtype=float)
+    cumulative_sum[window:] = cumulative_sum[window:] - cumulative_sum[:-window]
+    ma = cumulative_sum[window - 1:] / window
+    if fillNan:
+        ma = np.insert(ma, 0, np.nan*np.ones(int(window/2)))
+        ma = np.insert(ma, -1, np.nan*np.ones(int(window/2)))
+    elif fillNaNextra:
+        ma = np.insert(ma, 0, np.nan*np.ones(int(window/2)+1))
+        ma = np.insert(ma, len(ma), np.nan*np.ones(int(window/2)))        
+    return ma
