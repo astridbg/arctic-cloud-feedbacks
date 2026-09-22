@@ -419,3 +419,37 @@ def theilslopes_mk_prewhitened_test(x):
     else:
         p_value = mk.original_test(x_prewhitened).p
         return slope, intercept, low_slope, high_slope, p_value
+    
+
+def calculate_spatial_trends(data, start_year, end_year):
+    # Packages to import
+    import numpy as np
+    import xarray as xr
+
+    n_lat = len(data.lat)
+    n_lon = len(data.lon)
+    data = data.sel(year=slice(start_year, end_year))
+
+    trend = np.ones((n_lat, n_lon))*np.nan
+    p_value = np.ones((n_lat, n_lon))*np.nan
+    for ilon in range(n_lon):
+        for ilat in range(n_lat):
+            y = np.array(data.isel(lon=ilon, lat=ilat).values)
+            # Check if the lat-lon-point has values
+            if np.isnan(y).all():
+                slope = np.nan
+                p = np.nan
+            # Check if all values are the same
+            elif len(set(y)) == 1:
+                slope = 0
+                p = 0
+            else:
+                slope, _, _, _, p = theilslopes_mk_prewhitened_test(y)
+
+            trend[ilat, ilon] = slope
+            p_value[ilat, ilon] = p
+    
+    ds = xr.Dataset(data_vars = dict(trend=(['lat', 'lon'], trend), p_value=(['lat', 'lon'], p_value)), 
+                    coords = dict(lat = data.lat, lon = data.lon))
+    
+    return ds
