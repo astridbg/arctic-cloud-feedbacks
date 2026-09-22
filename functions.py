@@ -143,15 +143,25 @@ def xr_add_cyclic_point(da):
     da: xr.DataArray with dimensions (time,lat,lon)
     """
     from cartopy.util import add_cyclic_point
-    import xarray as xr 
+    import xarray as xr
+    from functools import reduce 
 
     # Use add_cyclic_point to interpolate input data
     lon_idx = da.dims.index('lon')
     wrap_data, wrap_lon = add_cyclic_point(da.values, coord=da.lon, axis=lon_idx)
 
     # Generate output DataArray with new data but same structure as input
+    dimensions = list(da.dims)
+    coords = []
+    for dim in dimensions:
+        if dim == 'lon':
+            coords.append({dim : wrap_lon})
+        else:
+            coords.append({dim : da[dim]})
+    from functools import reduce
+    coords = reduce(lambda a, b: dict(a, **b), coords)
     outp_da = xr.DataArray(data=wrap_data, 
-                           coords = {'time': da.time, 'lat': da.lat, 'lon': wrap_lon}, 
+                           coords = coords, 
                            dims=da.dims, 
                            attrs=da.attrs)
     
@@ -381,16 +391,20 @@ def prewhitening(x):
     from scipy.stats import theilslopes
     from statsmodels.tsa.stattools import acf
     import numpy as np
+    import math 
 
+    nan_flag = False
     x = x - np.mean(x)
-    slope, intercept, low_slope, high_slope = theilslopes(x, np.arange(len(x)))
+    slope, _, _, _ = theilslopes(x)
     x_detrended = x - slope*np.arange(len(x))
     r1 = acf(x_detrended)[1]
+    if np.isnan(r1) or math.isinf(r1):
+        nan_flag = True
     x_independent = x_detrended
     for i in range(1, (len(x))): x_independent[i] = x_detrended[i] - r1*x_detrended[i-1]
     x_new = x_independent + slope*np.arange(len(x))
 
-    return x_new
+    return x_new, nan_flag
 
 def theilslopes_mk_prewhitened_test(x):
 
@@ -398,8 +412,10 @@ def theilslopes_mk_prewhitened_test(x):
     import pymannkendall as mk
     import numpy as np
 
-    slope, intercept, low_slope, high_slope = theilslopes(x, np.arange(len(x)))
-    x_prewhitened = prewhitening(x)
-    p_value = mk.original_test(x_prewhitened).p
-
-    return slope, intercept, low_slope, high_slope, p_value
+    slope, intercept, low_slope, high_slope = theilslopes(x)
+    x_prewhitened, nan_flag = prewhitening(x)
+    if nan_flag:
+        return np.nan, np.nan, np.nan, np.nan, np.nan
+    else:
+        p_value = mk.original_test(x_prewhitened).p
+        return slope, intercept, low_slope, high_slope, p_value
