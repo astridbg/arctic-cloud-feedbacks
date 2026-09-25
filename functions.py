@@ -475,7 +475,7 @@ def moving_average(data, window=3, fillNan=False, fillNaNextra=False):
     ma = cumulative_sum[window - 1:] / window
     if fillNan:
         ma = np.insert(ma, 0, np.nan*np.ones(int(window/2)))
-        ma = np.insert(ma, -1, np.nan*np.ones(int(window/2)))
+        ma = np.insert(ma, len(ma), np.nan*np.ones(int(window/2)))
     elif fillNaNextra:
         ma = np.insert(ma, 0, np.nan*np.ones(int(window/2)+1))
         ma = np.insert(ma, len(ma), np.nan*np.ones(int(window/2)))        
