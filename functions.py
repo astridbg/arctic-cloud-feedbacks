@@ -61,6 +61,19 @@ def computeWeightedMean(ds):
     weighted_mean = air_weighted.mean(("lon", "lat"))
     return weighted_mean
 
+def computeWeightedSum(ds):
+
+    # Author: Anne Fouilloux
+    import numpy as np
+
+    # Compute weights based on the xarray you pass
+    weights = np.cos(np.deg2rad(ds.lat))
+    weights.name = "weights"
+    # Compute weighted mean
+    air_weighted = ds.weighted(weights)
+    weighted_sum = air_weighted.sum(("lon", "lat"))
+    return weighted_sum
+
 
 def computeWeightedMeanMasked(ds, lat_lon_mask):
 
